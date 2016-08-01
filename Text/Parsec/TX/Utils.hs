@@ -308,25 +308,31 @@ strictParseSimpleEncoded t = parse (simpleParser <* eof) "" t
 
 ----------------------------------------------------------------------
 
+#if MIN_VERSION_template_haskell(2, 11, 0)
+#define NO_OVERLAP Nothing
+#else
+#define NO_OVERLAP
+#endif
+
 sqlTypeFunD :: Exp -> Dec
 sqlTypeFunD st = FunD 'sqlType
                 [ Clause [WildP] (NormalB st) [] ]
 
 persistFieldInstanceD :: Type -> [Dec] -> Dec
 persistFieldInstanceD typ =
-    InstanceD [] (ConT ''PersistField `AppT` typ)
+    InstanceD NO_OVERLAP [] (ConT ''PersistField `AppT` typ)
 
 persistFieldSqlInstanceD :: Type -> [Dec] -> Dec
 persistFieldSqlInstanceD typ =
-    InstanceD [] (ConT ''PersistFieldSql `AppT` typ)
+    InstanceD NO_OVERLAP [] (ConT ''PersistFieldSql `AppT` typ)
 
 toJsonInstanceD :: Type -> [Dec] -> Dec
 toJsonInstanceD typ =
-    InstanceD [] (ConT ''ToJSON `AppT` typ)
+    InstanceD NO_OVERLAP [] (ConT ''ToJSON `AppT` typ)
 
 fromJsonInstanceD :: Type -> [Dec] -> Dec
 fromJsonInstanceD typ =
-    InstanceD [] (ConT ''FromJSON `AppT` typ)
+    InstanceD NO_OVERLAP [] (ConT ''FromJSON `AppT` typ)
 
 
 parsePVByParser :: Parser a -> PersistValue -> Either Text a
