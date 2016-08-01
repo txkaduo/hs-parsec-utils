@@ -22,7 +22,7 @@ Flag parsec3
 library
   exposed-modules:     Text.Parsec.TX.Utils
   -- other-modules:       
-  build-depends:       base >=4.7 && <4.9
+  build-depends:       base >=4 && <5
                      , template-haskell
                      , text
                      , parsec3-numbers
