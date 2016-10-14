@@ -164,9 +164,9 @@ deriveJsonS s = do
 
 -- | try render encoded result of every possible value,
 -- if it match the following string, parse successfully.
-enumEncodedParser :: (Enum a, Bounded a) =>
-    (a -> String)
-    -> CharParser a
+enumEncodedParser :: (Enum a, Bounded a, Stream s m Char)
+                  => (a -> String)
+                  -> ParsecT s u m a
 enumEncodedParser render = choice $ map f [minBound .. maxBound]
     where
         f x = try $ string (render x) >> return x
@@ -195,7 +195,7 @@ splitByParsec sep t = do
 -- 00:01:20: 1 minute 20 seconds
 -- 01:20: 1 minute 20 seconds
 -- 300.05 : 300.05 seconds
-parseSeconds :: CharParser Double
+parseSeconds :: (Stream s m Char) => ParsecT s u m Double
 parseSeconds = try p_minute_and_sec
                 <|> try p_hour_minute_and_sec2
                 <|> try p_minute_and_sec2
@@ -226,7 +226,9 @@ parseSeconds = try p_minute_and_sec
             return $ fromIntegral hour * 3600 + fromIntegral minute * 60 + sec
 
 -- | remove digit grouping marks, then parse the string as int
-parseIntWithGrouping :: Integral a => Char -> CharParser a
+parseIntWithGrouping :: (Stream s m Char, Integral a)
+                     => Char
+                     -> ParsecT s u m a
 parseIntWithGrouping sep = do
     s <- many1 (satisfy allowed_char)
     let s' = filter (/= sep) s
@@ -237,7 +239,7 @@ parseIntWithGrouping sep = do
         allowed_char c = isDigit c || c == '-' || c == sep
 
 
-parseByteSizeWithUnit :: Integral a => CharParser a
+parseByteSizeWithUnit :: (Stream s m Char, Integral a) => ParsecT s u m a
 parseByteSizeWithUnit = do
     sz <- PN.nat
     sz2 <- fmap (fromMaybe 1) $ optionMaybe p_unit
@@ -263,16 +265,16 @@ type ConnectPath = (HostName, PortID)
 -- :/path/to/file       -- localhost and unix socket
 -- hostname:80          -- hostname and port number
 -- hostname:www         -- hostname and service name
-parseFileOrConnectPath :: CharParser (Either FilePath ConnectPath)
+parseFileOrConnectPath :: (Stream s m Char) => ParsecT s u m (Either FilePath ConnectPath)
 parseFileOrConnectPath = try (fmap Right parseConnectPath) <|> fmap Left p_file
     where
         p_file = many1 anyChar
 
 {-# DEPRECATED parseFileOrNetworkPath "use parseFileOrConnectPath" #-}
-parseFileOrNetworkPath :: CharParser (Either FilePath ConnectPath)
+parseFileOrNetworkPath :: Stream s m Char => ParsecT s u m (Either FilePath ConnectPath)
 parseFileOrNetworkPath = parseFileOrConnectPath
 
-parseConnectPath :: CharParser ConnectPath
+parseConnectPath :: (Stream s m Char) => ParsecT s u m ConnectPath
 parseConnectPath = do
     hostname <- manyTill hostname_char (char ':')
     if null hostname
@@ -287,16 +289,18 @@ parseConnectPath = do
     where
         hostname_char = noneOf ":/"
 
-parsePortID :: CharParser PortID
+
+parsePortID :: Stream s m Char => ParsecT s u m PortID
 parsePortID = try (fmap (PortNumber . fromIntegral) natural)
                     <|> fmap Service (many1 anyChar)
 
-eol :: CharParser String
+
+eol :: Stream s m Char => ParsecT s u m String
 eol = try (fmap return newline) <|> (string "\r\n")
 
 
 -- | This helper function is for encodedListTextareaField.
-manySepEndBy :: CharParser b -> CharParser a -> CharParser [a]
+manySepEndBy :: Stream s m t => ParsecT s u m a1 -> ParsecT s u m a -> ParsecT s u m [a]
 manySepEndBy p_sep p = do
     -- if p eats some char of 'p_sep' the following line failed
     skipMany p_sep >> p `sepEndBy` (void $ many1 p_sep)
@@ -361,33 +365,31 @@ simpleLangDef = PT.LanguageDef
                     , PT.reservedNames  = []
                     , PT.caseSensitive  = True
                     }
-lexer :: Stream s Identity Char => PT.GenTokenParser s u Identity
+lexer :: Stream s m Char => PT.GenTokenParser s u m
 lexer       = PT.makeTokenParser simpleLangDef
 
-natural :: Stream s Identity Char => ParsecT s u Identity Integer
+natural :: Stream s m Char => ParsecT s u m Integer
 natural     = PT.natural lexer
 
-float :: Stream s Identity Char => ParsecT s u Identity Double
+float :: Stream s m Char => ParsecT s u m Double
 float       = PT.float lexer
 
-naturalOrFloat :: Stream s Identity Char =>
-                    ParsecT s u Identity (Either Integer Double)
+naturalOrFloat :: Stream s m Char =>
+                    ParsecT s u m (Either Integer Double)
 naturalOrFloat = PT.naturalOrFloat lexer
 
-integer :: Stream s Identity Char => ParsecT s u Identity Integer
+integer :: Stream s m Char => ParsecT s u m Integer
 integer       = PT.integer lexer
 
-whiteSpace :: Stream s Identity Char => ParsecT s u Identity ()
+whiteSpace :: Stream s m Char => ParsecT s u m ()
 whiteSpace  = PT.whiteSpace lexer
 
-lexeme :: Stream s Identity Char =>
-    ParsecT s u Identity a -> ParsecT s u Identity a
+lexeme :: Stream s m Char => ParsecT s u m a -> ParsecT s u m a
 lexeme      = PT.lexeme lexer
 
-symbol :: Stream s Identity Char => String -> ParsecT s u Identity String
+symbol :: Stream s m Char => String -> ParsecT s u m String
 symbol      = PT.symbol lexer
 
-parens :: Stream s Identity Char =>
-            ParsecT s u Identity a -> ParsecT s u Identity a
+parens :: Stream s m Char => ParsecT s u m a -> ParsecT s u m a
 parens      = PT.parens lexer
 
