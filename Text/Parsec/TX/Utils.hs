@@ -40,8 +40,10 @@ import Database.Persist.Sql                 (SqlType(..))
 import Database.Persist                     (PersistValue(..), PersistField(..))
 
 
+{-# DEPRECATED GenCharParser "to be removed" #-}
 type GenCharParser u m a = forall s. Stream s m Char => ParsecT s u m a
 
+{-# DEPRECATED CharParser "to be removed" #-}
 type CharParser a = GenCharParser () Identity a
 
 parseWithCharParserMaybe :: Stream s Identity t => Parsec s () a -> s -> Maybe a
@@ -59,7 +61,7 @@ parseMaybeSimpleEncoded = parseWithCharParserMaybe (simpleParser <* eof)
 -- and let compiler generate instance of Show/Read automatically.
 class SimpleStringRep a where
     simpleEncode :: a -> String
-    simpleParser :: CharParser a
+    simpleParser :: (Monad m, Stream s m Char) => ParsecT s u m a
 
 instance SimpleStringRep () where
     simpleEncode _ = ""
@@ -112,7 +114,7 @@ simpleParseJson name = A.withText name $ \t -> do
         Right x -> return x
 
 -- | helper for implement 'simpleParser'
-makeSimpleParserByTable :: [(String, a)] -> CharParser a
+makeSimpleParserByTable :: [(String, a)] -> GenCharParser u m a
 makeSimpleParserByTable lst =
     choice $
         flip map lst $ \(s, v) ->
