@@ -114,11 +114,11 @@ simpleParseJson name = A.withText name $ \t -> do
         Right x -> return x
 
 -- | helper for implement 'simpleParser'
-makeSimpleParserByTable :: [(String, a)] -> GenCharParser u m a
+makeSimpleParserByTable :: Stream s m Char => [(String, a)] -> ParsecT s u m a
 makeSimpleParserByTable lst =
     choice $
         flip map lst $ \(s, v) ->
-            try $ string s >> return v
+          try $ string s >> eof  >> return v
 
 -- | generate instance somewhat like this
 -- a must be an instance of SimpleStringRep
