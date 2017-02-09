@@ -55,47 +55,64 @@ parseMaybeSimpleEncoded :: (SimpleStringRep a, Stream s Identity Char)
                         => s -> Maybe a
 parseMaybeSimpleEncoded = parseWithCharParserMaybe (simpleParser <* eof)
 
+class SimpleEncode a where
+  simpleEncode :: a -> String
+
 -- | a data type that can be encoded into string, and decoded from string.
 -- Use this class instead of Show/Read, when you need to control
 -- the details of serialization format in DB or config file (like Aeson),
 -- and let compiler generate instance of Show/Read automatically.
-class SimpleStringRep a where
-    simpleEncode :: a -> String
+class SimpleEncode a => SimpleStringRep a where
     simpleParser :: (Monad m, Stream s m Char) => ParsecT s u m a
 
-instance SimpleStringRep () where
+instance SimpleEncode () where
     simpleEncode _ = ""
+
+instance SimpleStringRep () where
     simpleParser = return ()
 
-instance SimpleStringRep Double where
+instance SimpleEncode Double where
     simpleEncode = show
+
+instance SimpleStringRep Double where
     simpleParser = fmap (either (fromIntegral :: Integer -> Double) id)
                     PN.natFloat
 
-instance SimpleStringRep Float where
+instance SimpleEncode Float where
     simpleEncode = show
+
+instance SimpleStringRep Float where
     simpleParser = fmap (either (fromIntegral :: Integer -> Float) id)
                     PN.natFloat
 
-instance SimpleStringRep Int where
+instance SimpleEncode Int where
     simpleEncode = show
+
+instance SimpleStringRep Int where
     simpleParser = PN.int
+
+instance SimpleEncode Int64 where
+    simpleEncode = show
 
 instance SimpleStringRep Int64 where
-    simpleEncode = show
     simpleParser = PN.int
+
+instance SimpleEncode Word32 where
+    simpleEncode = show
 
 instance SimpleStringRep Word32 where
-    simpleEncode = show
     simpleParser = PN.nat
 
-instance SimpleStringRep Integer where
+instance SimpleEncode Integer where
     simpleEncode = show
+
+instance SimpleStringRep Integer where
     simpleParser = PN.int
 
-instance SimpleStringRep ByteString where
+instance SimpleEncode ByteString where
     simpleEncode = B8.toString . B16.encode
 
+instance SimpleStringRep ByteString where
     simpleParser = do
         s <- many1 hexDigit
         let (good, invalid) = B16.decode $ B8.fromString s
@@ -103,7 +120,7 @@ instance SimpleStringRep ByteString where
             then return good
             else parserFail $ "cannot decode as hex-encoded bytestring"
 
-simpleEncodeParens :: SimpleStringRep a => a -> String
+simpleEncodeParens :: SimpleEncode a => a -> String
 simpleEncodeParens x = mconcat [ "(", simpleEncode x, ")" ]
 
 simpleParseJson :: SimpleStringRep a => String -> A.Value -> AT.Parser a
@@ -119,6 +136,7 @@ makeSimpleParserByTable lst =
     choice $
         flip map lst $ \(s, v) ->
           try $ string s >> eof  >> return v
+
 
 -- | generate instance somewhat like this
 -- a must be an instance of SimpleStringRep
@@ -163,6 +181,19 @@ deriveJsonS s = do
             ]
         ]
 
+
+-- | 用于生成 SimpleStringRep 实例
+-- 要求被处理的类型是 Enum, Bounded
+deriveSimpleStringRepEnumBounded :: String -> Q [Dec]
+deriveSimpleStringRepEnumBounded s = do
+  parser_fun <- [| enumEncodedParser simpleEncode |]
+  return
+      [ simpleStringRepInstanceD (ConT $ mkName s)
+          [ FunD 'simpleParser
+              [ Clause [] (NormalB parser_fun) []
+              ]
+          ]
+      ]
 
 -- | try render encoded result of every possible value,
 -- if it match the following string, parse successfully.
@@ -339,6 +370,10 @@ toJsonInstanceD typ =
 fromJsonInstanceD :: Type -> [Dec] -> Dec
 fromJsonInstanceD typ =
     InstanceD NO_OVERLAP [] (ConT ''FromJSON `AppT` typ)
+
+simpleStringRepInstanceD :: Type -> [Dec] -> Dec
+simpleStringRepInstanceD typ =
+    InstanceD NO_OVERLAP [] (ConT ''SimpleStringRep `AppT` typ)
 
 
 parsePVByParser :: Parser a -> PersistValue -> Either Text a
