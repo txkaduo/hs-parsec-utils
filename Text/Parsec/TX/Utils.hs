@@ -202,7 +202,7 @@ enumEncodedParser :: (Enum a, Bounded a, Stream s m Char)
                   -> ParsecT s u m a
 enumEncodedParser render = choice $ map f [minBound .. maxBound]
     where
-        f x = try $ string (render x) >> return x
+      f x = try $ string (render x) >> eof >> return x
 
 
 -- | split a text/string, by a parser
