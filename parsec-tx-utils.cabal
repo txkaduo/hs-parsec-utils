@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                parsec-tx-utils
-version:             0.3.0.0
+version:             0.3.0.1
 synopsis:            Helpers for parsec3
 -- description:         
 license:             BSD3
