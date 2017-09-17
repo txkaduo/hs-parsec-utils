@@ -33,6 +33,7 @@ library
                      , utf8-string
                      , network
                      , safecopy
+                     , path-pieces
 
   if flag(parsec3)
       build-depends:   parsec3

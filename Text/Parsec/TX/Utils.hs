@@ -34,6 +34,7 @@ import qualified Text.Parsec.Number         as PN
 import qualified Data.ByteString.Base16     as B16
 import qualified Data.ByteString.UTF8       as B8
 import qualified Data.ByteString            as B
+import Web.PathPieces                       (PathPiece(..))
 
 
 import Database.Persist.Sql                 (SqlType(..))
@@ -177,6 +178,22 @@ deriveJsonS s = do
         , fromJsonInstanceD (ConT $ mkName s)
             [ FunD 'parseJSON
                 [ Clause [] (NormalB parse_json) []
+                ]
+            ]
+        ]
+
+
+derivePathPieceS :: String -> Q [Dec]
+derivePathPieceS s = do
+    to_path_piece <- [| T.pack . simpleEncode |]
+    from_path_piece <- [| parseMaybeSimpleEncoded |]
+    return
+        [ pathPieceInstanceD (ConT $ mkName s)
+            [ FunD 'toPathPiece
+                [ Clause [] (NormalB to_path_piece) []
+                ]
+            , FunD 'fromPathPiece
+                [ Clause [] (NormalB from_path_piece) []
                 ]
             ]
         ]
@@ -374,6 +391,10 @@ fromJsonInstanceD typ =
 simpleStringRepInstanceD :: Type -> [Dec] -> Dec
 simpleStringRepInstanceD typ =
     InstanceD NO_OVERLAP [] (ConT ''SimpleStringRep `AppT` typ)
+
+pathPieceInstanceD :: Type -> [Dec] -> Dec
+pathPieceInstanceD typ =
+    InstanceD NO_OVERLAP [] (ConT ''PathPiece `AppT` typ)
 
 
 parsePVByParser :: Parser a -> PersistValue -> Either Text a
