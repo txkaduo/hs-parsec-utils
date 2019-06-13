@@ -212,6 +212,42 @@ deriveSimpleStringRepEnumBounded s = do
           ]
       ]
 
+-- | Get longest common prefix
+lcp :: Eq a => [[a]] -> [a]
+lcp = fmap head . takeWhile allEqual . truncTranspose
+  where
+    truncTranspose :: [[a]] -> [[a]]
+    truncTranspose xs
+      | any null xs = []
+      | otherwise = (head <$> xs) : truncTranspose (tail <$> xs)
+    allEqual :: Eq a => [a] -> Bool
+    allEqual (x:xs) = all (== x) xs
+
+-- | Generate simple encode from constructors.
+-- | Longest common prefix will be removed.
+deriveSimpleEncode :: Name -> Q [Dec]
+-- {{{
+deriveSimpleEncode typ = do
+  dec <- reify typ
+  case dec of
+    TyConI (DataD _ _ _ _ cons _) -> return $ mk cons
+    _ -> error "deriveSimpleEncode only support data type now"
+  where
+    mk [] = error "no constructor found"
+    mk [con] = error "deriveSimpleEncode cannot generate from only one constructor"
+    mk cons = do
+      let lcp_length = length $ lcp $ getNameS cons
+      return $ InstanceD Nothing []
+        (ConT ''SimpleEncode `AppT` ConT typ)
+        $ return $ FunD 'simpleEncode $ mk_enc lcp_length cons
+
+    mk_enc lcp_length = map $ \ (NormalC cn _) -> do
+      let val = A.camelTo2 '-' $ drop lcp_length $ nameBase cn
+      Clause [ ConP cn [] ] (NormalB $ LitE $ StringL val) []
+
+    getNameS = map $ \ (NormalC cn _) -> nameBase cn
+-- }}}
+
 -- | try render encoded result of every possible value,
 -- if it match the following string, parse successfully.
 enumEncodedParser :: (Enum a, Bounded a, Stream s m Char)
