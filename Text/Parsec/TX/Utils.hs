@@ -20,11 +20,17 @@ import Data.Monoid                          (mconcat)
 import Data.Functor.Identity                (Identity)
 import Data.Text                            (Text)
 import Data.ByteString                      (ByteString)
-import Data.Char                            (isDigit, toUpper)
+import Data.Char                            (isDigit, toUpper, isSpace)
 import Data.Maybe
 import Data.Int
 import Data.Word
+
+#if MIN_VERSION_network(2, 7, 0)
+import Network.Socket                       (HostName, ServiceName, SockAddr(..))
+#else
 import Network                              (HostName, PortID(..))
+#endif
+
 import qualified Data.Aeson                 as A
 import Data.Aeson                           (ToJSON(..), FromJSON(..))
 import qualified Data.Aeson.Types           as AT
@@ -221,6 +227,7 @@ lcp = fmap head . takeWhile allEqual . truncTranspose
       | any null xs = []
       | otherwise = (head <$> xs) : truncTranspose (tail <$> xs)
     allEqual :: Eq a => [a] -> Bool
+    allEqual [] = False
     allEqual (x:xs) = all (== x) xs
 
 -- | Generate simple encode from constructors.
@@ -234,7 +241,7 @@ deriveSimpleEncode typ = do
     _ -> error "deriveSimpleEncode only support data type now"
   where
     mk [] = error "no constructor found"
-    mk [con] = error "deriveSimpleEncode cannot generate from only one constructor"
+    mk [_con] = error "deriveSimpleEncode cannot generate from only one constructor"
     mk cons = do
       let lcp_length = length $ lcp $ getNameS cons
       return $ InstanceD Nothing []
@@ -269,7 +276,7 @@ splitByParsec sep t = do
             (skipMany sep >> many anyChar `sepEndBy` (eof <|> (void $ many1 sep)))
             "" t
             of
-            Left err -> fail $ "failed to split text: " ++ show err
+            Left err -> Left $ "failed to split text: " ++ show err
             Right x -> return $ map fromString x
 
 
@@ -341,7 +348,11 @@ parseByteSizeWithUnit = do
                 _   -> fail $ "unknown unit char" ++ [uc]
 
 
+#if MIN_VERSION_network(2, 7, 0)
+type ConnectPath = Either SockAddr (HostName, ServiceName)
+#else
 type ConnectPath = (HostName, PortID)
+#endif
 
 -- | mainly for config file: parse a string value into
 -- a file path or a network host and port
@@ -360,6 +371,22 @@ parseFileOrConnectPath = try (fmap Right parseConnectPath) <|> fmap Left p_file
 parseFileOrNetworkPath :: Stream s m Char => ParsecT s u m (Either FilePath ConnectPath)
 parseFileOrNetworkPath = parseFileOrConnectPath
 
+#if MIN_VERSION_network(2, 7, 0)
+parseConnectPath :: (Stream s m Char) => ParsecT s u m ConnectPath
+parseConnectPath = do
+    hostname <- manyTill hostname_char (char ':')
+    if null hostname
+        then do
+#if !defined(mingw32_HOST_OS) && !defined(cygwin32_HOST_OS) && !defined(_WIN32)
+            fmap (Left . SockAddrUnix) $ many1 anyChar
+#else
+            fail $ "UnixSocket is not available on this platform"
+#endif
+        else do
+            fmap (Right . (hostname,)) parseServiceName
+    where
+        hostname_char = noneOf ":/"
+#else
 parseConnectPath :: (Stream s m Char) => ParsecT s u m ConnectPath
 parseConnectPath = do
     hostname <- manyTill hostname_char (char ':')
@@ -374,11 +401,17 @@ parseConnectPath = do
             fmap (hostname,) parsePortID
     where
         hostname_char = noneOf ":/"
+#endif
 
-
+#if MIN_VERSION_network(2, 7, 0)
+parseServiceName :: Stream s m Char => ParsecT s u m ServiceName
+parseServiceName = many1 (satisfy allowed_char)
+  where allowed_char = not . isSpace
+#else
 parsePortID :: Stream s m Char => ParsecT s u m PortID
 parsePortID = try (fmap (PortNumber . fromIntegral) natural)
                     <|> fmap Service (many1 anyChar)
+#endif
 
 
 eol :: Stream s m Char => ParsecT s u m String
