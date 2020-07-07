@@ -20,13 +20,14 @@ import Data.Monoid                          (mconcat)
 import Data.Functor.Identity                (Identity)
 import Data.Text                            (Text)
 import Data.ByteString                      (ByteString)
-import Data.Char                            (isDigit, toUpper, isSpace)
+import Data.Char                            (isDigit, toUpper)
 import Data.Maybe
 import Data.Int
 import Data.Word
 
-#if MIN_VERSION_network(2, 7, 0)
+#if MIN_VERSION_network(3, 0, 0)
 import Network.Socket                       (HostName, ServiceName, SockAddr(..))
+import Data.Char                            (isSpace)
 #else
 import Network                              (HostName, PortID(..))
 #endif
@@ -348,7 +349,7 @@ parseByteSizeWithUnit = do
                 _   -> fail $ "unknown unit char" ++ [uc]
 
 
-#if MIN_VERSION_network(2, 7, 0)
+#if MIN_VERSION_network(3, 0, 0)
 type ConnectPath = Either SockAddr (HostName, ServiceName)
 #else
 type ConnectPath = (HostName, PortID)
@@ -371,7 +372,7 @@ parseFileOrConnectPath = try (fmap Right parseConnectPath) <|> fmap Left p_file
 parseFileOrNetworkPath :: Stream s m Char => ParsecT s u m (Either FilePath ConnectPath)
 parseFileOrNetworkPath = parseFileOrConnectPath
 
-#if MIN_VERSION_network(2, 7, 0)
+#if MIN_VERSION_network(3, 0, 0)
 parseConnectPath :: (Stream s m Char) => ParsecT s u m ConnectPath
 parseConnectPath = do
     hostname <- manyTill hostname_char (char ':')
@@ -403,7 +404,7 @@ parseConnectPath = do
         hostname_char = noneOf ":/"
 #endif
 
-#if MIN_VERSION_network(2, 7, 0)
+#if MIN_VERSION_network(3, 0, 0)
 parseServiceName :: Stream s m Char => ParsecT s u m ServiceName
 parseServiceName = many1 (satisfy allowed_char)
   where allowed_char = not . isSpace
